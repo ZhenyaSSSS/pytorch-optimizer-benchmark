@@ -101,7 +101,8 @@ def run_single(model: str, optim: str, args) -> Dict[str, Any]:
         "--device", args.device,
         "--seed", str(args.seed),
         "--track-generalization",
-        "--eval-robustness",
+        "--eval-robustness", 
+        "--plot-landscape",
         "--wandb",
         "--wandb-project", args.wandb_project,
     ]

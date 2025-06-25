@@ -77,4 +77,6 @@ def plot_loss_surface(model: nn.Module, loss_fn, dataloader, steps: int = 21, sp
     ax.set_zlabel("Loss")
     ax.set_title("Loss surface around model")
     plt.tight_layout()
-    plt.show() 
+    
+    # Возвращаем figure для логирования в wandb
+    return fig 

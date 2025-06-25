@@ -32,6 +32,7 @@ import torchvision.transforms as T
 
 from utils.seed import set_seed
 from utils.cifar10_c import download_cifar10_c, evaluate_corruption_robustness
+from utils.loss_landscape import plot_loss_surface
 from models.convnet import SmallConvNet
 from models.mlp_mixer import SmallMLPMixer
 from optimizers import A2SAM, HATAM
@@ -233,7 +234,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--data-root", type=str, default="./data")
     p.add_argument("--model", type=str, default="convnet", choices=["convnet", "mlp-mixer"])
-    p.add_argument("--optim", type=str, default="adam", choices=["adam", "sam", "a2sam", "hatam"])
+    p.add_argument("--optim", type=str, default="adam", choices=["adam", "sam", "a2sam", "hatam", "sam-sgd", "sam-adam", "asam-sgd", "asam-adam", "a2sam-sgd", "a2sam-adam"])
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--lr", type=float, default=1e-3)
@@ -244,6 +245,7 @@ def main():
     p.add_argument("--fake-data", action="store_true", help="use FakeData instead of downloading CIFAR-10 (smoke test)")
     p.add_argument("--eval-robustness", action="store_true", help="evaluate robustness on CIFAR-10-C (requires 2.9GB download)")
     p.add_argument("--track-generalization", action="store_true", help="track detailed generalization metrics throughout training")
+    p.add_argument("--plot-landscape", action="store_true", help="generate 3D loss landscape visualization (computationally expensive)")
     p.add_argument("--wandb", action="store_true", help="log metrics to Weights & Biases")
     p.add_argument("--wandb-project", type=str, default="New_SAM", help="WandB project name")
     args = p.parse_args()
@@ -369,6 +371,37 @@ def main():
     print(f"Generalization gap: {generalization_gap:.2f}% (lower is better)")
     print(f"Test accuracy: {best_acc:.2f}% (higher is better)")
     print(f"Note: Good optimizers should have low generalization gap AND high test accuracy")
+
+    # Generate 3D loss landscape if requested
+    if args.plot_landscape and not args.fake_data:
+        print(f"\n=== Generating Loss Landscape ===")
+        print("Warning: This is computationally expensive and may take several minutes...")
+        try:
+            import torch.nn as nn
+            # Use a subset of test data for faster computation
+            subset_size = min(1000, len(test_loader.dataset))
+            subset_indices = torch.randperm(len(test_loader.dataset))[:subset_size]
+            subset_dataset = torch.utils.data.Subset(test_loader.dataset, subset_indices)
+            subset_loader = torch.utils.data.DataLoader(subset_dataset, batch_size=100, shuffle=False)
+            
+            loss_fn = nn.CrossEntropyLoss()
+            fig = plot_loss_surface(model, loss_fn, subset_loader, steps=15, span=0.5, device=args.device)
+            
+            # Save figure locally
+            landscape_filename = f"loss_landscape_{args.model}_{args.optim}_seed{args.seed}.png"
+            fig.savefig(landscape_filename, dpi=150, bbox_inches='tight')
+            print(f"Loss landscape saved as {landscape_filename}")
+            
+            # Log to wandb if available
+            if wandb_run is not None:
+                wandb_run.log({"loss_landscape": wandb.Image(fig)})
+                print("Loss landscape logged to wandb")
+            
+            import matplotlib.pyplot as plt
+            plt.close(fig)  # Free memory
+            
+        except Exception as e:
+            print(f"Failed to generate loss landscape: {e}")
 
     # ---------------- WandB finish ----------------
     if wandb_run is not None:
