@@ -27,6 +27,9 @@ try:
 except ImportError:
     wandb = None
 
+import torchvision
+from utils.cifar10_c import download_cifar10_c
+
 MODELS = ["convnet", "mlp-mixer"]
 OPTIMS = [
     "adam",
@@ -51,6 +54,31 @@ OPTIM_HPARAMS = {
     "a2sam-sgd":  {"lr": 1e-1, "rho": 0.05}, # A2SAM использует свой механизм, rho стандартный
     "a2sam-adam": {"lr": 1e-4, "rho": 0.05}, 
 }
+
+def prepare_datasets(root: str):
+    """Downloads CIFAR10 and CIFAR10-C if they don't exist."""
+    print("\n" + "=" * 80)
+    print("STEP 1: PREPARING DATASETS")
+    print("=" * 80)
+    
+    # Download CIFAR-10 train and test sets
+    print("Checking for CIFAR-10...")
+    try:
+        torchvision.datasets.CIFAR10(root, train=True, download=True)
+        torchvision.datasets.CIFAR10(root, train=False, download=True)
+        print("✅ CIFAR-10 is ready.")
+    except Exception as e:
+        print(f"❌ Failed to download CIFAR-10: {e}")
+
+    # Download CIFAR-10-C for robustness evaluation
+    print("\nChecking for CIFAR-10-C...")
+    try:
+        download_cifar10_c(root)
+        print("✅ CIFAR-10-C is ready.")
+    except Exception as e:
+        print(f"❌ Could not download CIFAR-10-C: {e}")
+        print("Robustness evaluation will be skipped if data is missing.")
+    print("-" * 80)
 
 
 def run_single(model: str, optim: str, args) -> Dict[str, Any]:
@@ -134,11 +162,23 @@ if __name__ == "__main__":
     parser.add_argument("--wandb-project", type=str, default="New_SAM")
     args = parser.parse_args()
 
+    # Create data root directory if it doesn't exist
+    data_root = Path("./data")
+    data_root.mkdir(exist_ok=True)
+    
+    # --- Загружаем все данные ПЕРЕД началом бенчмарка ---
+    if not args.fake_data:
+        prepare_datasets(str(data_root))
+
     # WandB aggregated run (optional)
     wandb_tbl_run = None
     if wandb is not None and os.environ.get("WANDB_API_KEY"):
         wandb.login(key=os.environ["WANDB_API_KEY"])
         wandb_tbl_run = wandb.init(project=args.wandb_project, name="benchmark_full", reinit=True)
+
+    print("\n" + "=" * 80)
+    print("STEP 2: RUNNING BENCHMARKS")
+    print("=" * 80)
 
     results: List[Dict[str, Any]] = []
     for model, optim in itertools.product(MODELS, OPTIMS):
