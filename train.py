@@ -98,7 +98,7 @@ def create_model(name: str):
 # ----------------------------- optimiser factory -----------------------------
 
 
-def create_optimizer(name: str, params, lr: float, rho: float):
+def create_optimizer(name: str, params, lr: float, rho: float, alpha: float = 0.1, k: int = 1, hessian_update_freq: int = 10, gamma: float = 0.1, weight_decay: float = 0.0):
     name = name.lower()
     base_optimizer_cls = torch.optim.SGD # по умолчанию для SAM/A2SAM
     base_optim_name = "sgd"
@@ -114,7 +114,7 @@ def create_optimizer(name: str, params, lr: float, rho: float):
             raise ValueError(f"Unknown base optimizer: {base_optim_name}")
 
     if optim_name == "adam":
-        return torch.optim.AdamW(params, lr=lr)
+        return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
     
     elif optim_name == "sam" or optim_name == "asam":
         # Используем локальную реализацию davda54/sam
@@ -128,13 +128,16 @@ def create_optimizer(name: str, params, lr: float, rho: float):
         base_optimizer_kwargs={"lr": lr}
         if base_optimizer_cls == torch.optim.SGD:
             base_optimizer_kwargs["momentum"] = 0.9
-        return A2SAM(params, base_optimizer_cls=base_optimizer_cls, base_optimizer_kwargs=base_optimizer_kwargs, rho=rho)
+        # ✅ ИСПРАВЛЕНО: Передаем все параметры A²SAM
+        return A2SAM(params, base_optimizer_cls=base_optimizer_cls, base_optimizer_kwargs=base_optimizer_kwargs, 
+                     rho=rho, alpha=alpha, k=k, hessian_update_freq=hessian_update_freq)
     
     elif optim_name == "hatam":
         # HATAM не поддерживает базовые оптимизаторы
         if base_optim_name != "sgd": # если пользователь ввел hatam-adam
             print("Warning: HATAM does not use a base optimizer concept. Ignoring '-adam'.")
-        return HATAM(params, lr=lr)
+        # ✅ ИСПРАВЛЕНО: Передаем все параметры HATAM
+        return HATAM(params, lr=lr, gamma=gamma, weight_decay=weight_decay)
     
     else:
         raise ValueError(f"Unknown optimiser {name}")
@@ -239,6 +242,12 @@ def main():
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--rho", type=float, default=0.05, help="SAM/ASAM neighborhood size")
+    # ✅ ДОБАВЛЕНО: Дополнительные параметры для A²SAM и HATAM
+    p.add_argument("--alpha", type=float, default=0.1, help="A²SAM: strength of Hessian contribution in metric M = I + αH_k")
+    p.add_argument("--k", type=int, default=1, help="A²SAM: rank of Hessian approximation (number of eigenpairs)")
+    p.add_argument("--hessian-update-freq", type=int, default=10, help="A²SAM: steps between Hessian recomputations")
+    p.add_argument("--gamma", type=float, default=0.1, help="HATAM: strength of trajectory correction")
+    p.add_argument("--weight-decay", type=float, default=0.0, help="Weight decay (L2 regularization)")
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--log-interval", type=int, default=100, help="print training status every N batches")
@@ -268,7 +277,9 @@ def main():
     train_loader, test_loader = build_cifar10_dataloaders(args.data_root, args.batch_size, fake=args.fake_data)
 
     model = create_model(args.model).to(args.device)
-    optimizer = create_optimizer(args.optim, model.parameters(), lr=args.lr, rho=args.rho)
+    optimizer = create_optimizer(args.optim, model.parameters(), lr=args.lr, rho=args.rho, 
+                                alpha=args.alpha, k=args.k, hessian_update_freq=args.hessian_update_freq, 
+                                gamma=args.gamma, weight_decay=args.weight_decay)
 
     # Initialize tracking variables
     best_acc = 0.0

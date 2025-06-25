@@ -46,13 +46,13 @@ OPTIMS = [
 # Оптимизаторы на базе Adam и SGD требуют разных LR, а SAM/ASAM — разных rho
 OPTIM_HPARAMS = {
     "adam":       {"lr": 1e-3},
-    "hatam":      {"lr": 1e-3},
+    "hatam":      {"lr": 3e-4, "gamma": 0.4, "weight_decay": 0.01},  # ✅ ИСПРАВЛЕНО: правильные параметры HATAM
     "sam-sgd":    {"lr": 1e-1, "rho": 0.05}, 
     "sam-adam":   {"lr": 1e-3, "rho": 0.05},
     "asam-sgd":   {"lr": 1e-1, "rho": 2.0},  # ASAM требует больший rho
     "asam-adam":  {"lr": 1e-3, "rho": 2.0},  # 
-    "a2sam-sgd":  {"lr": 1e-1, "rho": 0.05}, # A2SAM использует свой механизм, rho стандартный
-    "a2sam-adam": {"lr": 1e-4, "rho": 0.05}, 
+    "a2sam-sgd":  {"lr": 0.05, "rho": 0.03, "alpha": 0.5, "k": 5, "hessian_update_freq": 5},  # ✅ ИСПРАВЛЕНО: правильные параметры A²SAM
+    "a2sam-adam": {"lr": 3e-4, "rho": 0.03, "alpha": 0.5, "k": 5, "hessian_update_freq": 5},  # ✅ ИСПРАВЛЕНО
 }
 
 def prepare_datasets(root: str):
@@ -106,6 +106,18 @@ def run_single(model: str, optim: str, args) -> Dict[str, Any]:
         "--wandb",
         "--wandb-project", args.wandb_project,
     ]
+    
+    # ✅ ДОБАВЛЕНО: Передача дополнительных параметров для A²SAM и HATAM
+    if "alpha" in hparams:
+        cmd.extend(["--alpha", str(hparams["alpha"])])
+    if "k" in hparams:
+        cmd.extend(["--k", str(hparams["k"])])
+    if "hessian_update_freq" in hparams:
+        cmd.extend(["--hessian-update-freq", str(hparams["hessian_update_freq"])])
+    if "gamma" in hparams:
+        cmd.extend(["--gamma", str(hparams["gamma"])])
+    if "weight_decay" in hparams:
+        cmd.extend(["--weight-decay", str(hparams["weight_decay"])])
     if args.fake_data:
         cmd.append("--fake-data")
 
