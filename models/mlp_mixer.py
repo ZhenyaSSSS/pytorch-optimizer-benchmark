@@ -21,15 +21,15 @@ class PatchEmbedding(nn.Module):
 class MixerLayer(nn.Module):
     def __init__(self, n_patches, emb_dim, token_dim, channel_dim, drop=0.0):
         super().__init__()
+        self.norm1 = nn.LayerNorm(emb_dim)
+        self.norm2 = nn.LayerNorm(emb_dim)
         self.token_mlp = nn.Sequential(
-            nn.LayerNorm(emb_dim),
             nn.Linear(n_patches, token_dim),
             nn.GELU(),
             nn.Linear(token_dim, n_patches),
             nn.Dropout(drop),
         )
         self.channel_mlp = nn.Sequential(
-            nn.LayerNorm(emb_dim),
             nn.Linear(emb_dim, channel_dim),
             nn.GELU(),
             nn.Linear(channel_dim, emb_dim),
@@ -37,11 +37,16 @@ class MixerLayer(nn.Module):
         )
 
     def forward(self, x):  # (B, N, C)
-        y = x.transpose(1, 2)  # (B, C, N)
+        # Token-mixing part
+        y = self.norm1(x)
+        y = y.transpose(1, 2)  # (B, C, N)
         y = self.token_mlp(y)
-        y = y.transpose(1, 2)
+        y = y.transpose(1, 2)  # (B, N, C)
         x = x + y
-        x = x + self.channel_mlp(x)
+
+        # Channel-mixing part
+        y = self.norm2(x)
+        x = x + self.channel_mlp(y)
         return x
 
 
