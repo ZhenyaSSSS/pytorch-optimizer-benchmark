@@ -1,0 +1,48 @@
+{
+  "args": {
+    "data_root": "./data",
+    "model": "convnet",
+    "optim": "adam",
+    "epochs": 2,
+    "batch_size": 128,
+    "lr": 0.001,
+    "device": "cpu",
+    "seed": 42,
+    "log_interval": 100,
+    "fake_data": true,
+    "eval_robustness": false,
+    "track_generalization": true
+  },
+  "training_history": {
+    "epoch": [
+      1,
+      2
+    ],
+    "train_loss": [
+      4.388270437717438,
+      2.65037202835083
+    ],
+    "train_acc": [
+      11.5234375,
+      10.7421875
+    ],
+    "test_loss": [
+      5.927570343017578,
+      2.4460712671279907
+    ],
+    "test_acc": [
+      8.59375,
+      12.109375
+    ],
+    "generalization_gap": [
+      2.9296875,
+      -1.3671875
+    ],
+    "optim_time": [
+      2.0943970680236816,
+      2.4569389820098877
+    ]
+  },
+  "best_test_acc": 12.109375,
+  "final_generalization_gap": -1.3671875
+}

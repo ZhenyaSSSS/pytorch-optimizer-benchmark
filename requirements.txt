@@ -1,0 +1,9 @@
+torch>=1.13
+torchvision>=0.14
+numpy
+matplotlib
+torch-optimizer  # for SAM baseline
+requests  # for downloading CIFAR-10-C
+tqdm  # for progress bars
+wandb  # experiment tracking
+pandas 
