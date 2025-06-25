@@ -35,6 +35,7 @@ from utils.cifar10_c import download_cifar10_c, evaluate_corruption_robustness
 from models.convnet import SmallConvNet
 from models.mlp_mixer import SmallMLPMixer
 from optimizers import A2SAM, HATAM
+from optimizers.sam_impl import SAM as DavdaSAM
 
 # === WandB (можно отключить CLI флагом) ===
 try:
@@ -98,14 +99,35 @@ def create_model(name: str):
 
 def create_optimizer(name: str, params, lr: float):
     name = name.lower()
+    base_optimizer_cls = torch.optim.SGD # по умолчанию для SAM/A2SAM
+    base_optim_name = "sgd"
+
+    if '-' in name:
+        name, base_optim_name = name.split('-')
+        if base_optim_name == "adam":
+            base_optimizer_cls = torch.optim.AdamW
+        elif base_optim_name == "sgd":
+            base_optimizer_cls = torch.optim.SGD
+        else:
+            raise ValueError(f"Unknown base optimizer: {base_optim_name}")
+
     if name == "adam":
         return torch.optim.AdamW(params, lr=lr)
     elif name == "sam":
-        from torch_optimizer import SAM  # external lightweight implementation (pip install torch-optimizer)
-        return SAM(params, base_optimizer=torch.optim.SGD, lr=lr, rho=0.05, momentum=0.9)
+        # Используем локальную реализацию davda54/sam
+        base_kwargs = {"lr": lr}
+        if base_optimizer_cls == torch.optim.SGD:
+            base_kwargs["momentum"] = 0.9
+        return DavdaSAM(params, base_optimizer_cls, **base_kwargs)
     elif name == "a2sam":
-        return A2SAM(params, base_optimizer_cls=torch.optim.SGD, base_optimizer_kwargs={"lr": lr, "momentum": 0.9}, rho=0.05)
+        base_optimizer_kwargs={"lr": lr}
+        if base_optimizer_cls == torch.optim.SGD:
+            base_optimizer_kwargs["momentum"] = 0.9
+        return A2SAM(params, base_optimizer_cls=base_optimizer_cls, base_optimizer_kwargs=base_optimizer_kwargs, rho=0.05)
     elif name == "hatam":
+        # HATAM не поддерживает базовые оптимизаторы
+        if base_optim_name != "sgd": # если пользователь ввел hatam-adam
+            print("Warning: HATAM does not use a base optimizer concept. Ignoring '-adam'.")
         return HATAM(params, lr=lr)
     else:
         raise ValueError(f"Unknown optimiser {name}")
@@ -123,27 +145,48 @@ def train_one_epoch(model, loader, optim, device, log_interval: int = 100, epoch
     
     # ✅ ДОБАВЛЕНИЕ: Измерение времени оптимизации
     optim_time = 0.0
+
+    # Проверяем, является ли оптимизатор SAM-ом от Davda, чтобы использовать кастомный training loop
+    is_davda_sam = isinstance(optim, DavdaSAM)
     
     for i, (inputs, targets) in enumerate(loader):
         inputs, targets = inputs.to(device), targets.to(device)
 
-        def closure():
-            optim.zero_grad()
+        if is_davda_sam:
+            # --- Кастомный цикл для SAM (davda54) ---
+            step_start = time.time()
+            
+            # Первый шаг
             outputs = model(inputs)
             loss = criterion(outputs, targets)
             loss.backward()
-            return loss
+            optim.first_step(zero_grad=True)
+            
+            # Второй шаг
+            criterion(model(inputs), targets).backward()
+            optim.second_step(zero_grad=True)
+            
+            optim_time += time.time() - step_start
 
-        loss = closure()
-        
-        # ✅ ДОБАВЛЕНИЕ: Измеряем время step'а оптимизатора
-        step_start = time.time()
-        # For optimisers, которые требуют closure, передаём его — для остальных call без аргументов.
-        try:
-            optim.step(closure)
-        except TypeError:
-            optim.step()
-        optim_time += time.time() - step_start
+        else:
+            # --- Стандартный цикл для остальных оптимизаторов ---
+            def closure():
+                optim.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+                loss.backward()
+                return loss
+
+            loss = closure()
+            
+            # ✅ ДОБАВЛЕНИЕ: Измеряем время step'а оптимизатора
+            step_start = time.time()
+            # For optimisers, которые требуют closure, передаём его — для остальных call без аргументов.
+            try:
+                optim.step(closure)
+            except TypeError:
+                optim.step()
+            optim_time += time.time() - step_start
 
         # заново получаем outputs без градиентов для метрик
         with torch.no_grad():

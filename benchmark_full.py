@@ -28,15 +28,24 @@ except ImportError:
     wandb = None
 
 MODELS = ["convnet", "mlp-mixer"]
-OPTIMS = ["adam", "sam", "a2sam", "hatam"]
+OPTIMS = [
+    "adam",
+    "hatam",
+    "sam-sgd",
+    "sam-adam",
+    "a2sam-sgd",
+    "a2sam-adam",
+]
 
 # === Оптимальные гиперпараметры для честного сравнения ===
 # Оптимизаторы на базе Adam и SGD требуют разных LR
 OPTIM_HPARAMS = {
-    "adam":    {"lr": 1e-3},
-    "hatam":   {"lr": 1e-3},
-    "sam":     {"lr": 1e-1, "base_optimizer": "SGD"}, # SGD-based
-    "a2sam":   {"lr": 1e-1, "base_optimizer": "SGD"}, # SGD-based
+    "adam":       {"lr": 1e-3},
+    "hatam":      {"lr": 1e-3},
+    "sam-sgd":    {"lr": 1e-1}, # SGD-based
+    "sam-adam":   {"lr": 1e-3}, # Adam-based
+    "a2sam-sgd":  {"lr": 1e-1}, # SGD-based
+    "a2sam-adam": {"lr": 1e-4}, # Adam-based, часто требует еще меньший LR
 }
 
 
@@ -101,11 +110,11 @@ def aggregate_table(rows: List[Dict[str, Any]]):
     print("\n" + "=" * 80)
     print("AGGREGATED RESULTS")
     print("=" * 80)
-    print(f"{header[0]:<10} {header[1]:<8} {header[2]:<7} {header[3]:<6} {header[4]:<7} {header[5]:<7}")
+    print(f"{header[0]:<10} {header[1]:<12} {header[2]:<7} {header[3]:<6} {header[4]:<7} {header[5]:<7}")
     print("-" * 60)
     for r in rows:
-        print(f"{r['model']:<10} {r['optimizer']:<8} {r.get('best_test_acc', 'n/a')!s:<7} "
-              f"{r.get('final_generalization_gap', 'n/a')!s:<6} {r.get('mCE', 'n/a')!s:<7} {int(r['elapsed_s']):<7}")
+        print(f"{r['model']:<10} {r['optimizer']:<12} {r.get('best_test_acc', 'n/a')!s:<7.2f} "
+              f"{r.get('final_generalization_gap', 'n/a')!s:<6.2f} {r.get('mCE', 'n/a')!s:<7.1f} {int(r['elapsed_s']):<7}")
 
 
 if __name__ == "__main__":
