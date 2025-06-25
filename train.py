@@ -97,13 +97,14 @@ def create_model(name: str):
 # ----------------------------- optimiser factory -----------------------------
 
 
-def create_optimizer(name: str, params, lr: float):
+def create_optimizer(name: str, params, lr: float, rho: float):
     name = name.lower()
     base_optimizer_cls = torch.optim.SGD # по умолчанию для SAM/A2SAM
     base_optim_name = "sgd"
+    optim_name = name
 
     if '-' in name:
-        name, base_optim_name = name.split('-')
+        optim_name, base_optim_name = name.split('-')
         if base_optim_name == "adam":
             base_optimizer_cls = torch.optim.AdamW
         elif base_optim_name == "sgd":
@@ -111,24 +112,29 @@ def create_optimizer(name: str, params, lr: float):
         else:
             raise ValueError(f"Unknown base optimizer: {base_optim_name}")
 
-    if name == "adam":
+    if optim_name == "adam":
         return torch.optim.AdamW(params, lr=lr)
-    elif name == "sam":
+    
+    elif optim_name == "sam" or optim_name == "asam":
         # Используем локальную реализацию davda54/sam
+        is_adaptive = (optim_name == "asam")
         base_kwargs = {"lr": lr}
         if base_optimizer_cls == torch.optim.SGD:
             base_kwargs["momentum"] = 0.9
-        return DavdaSAM(params, base_optimizer_cls, **base_kwargs)
-    elif name == "a2sam":
+        return DavdaSAM(params, base_optimizer_cls, rho=rho, adaptive=is_adaptive, **base_kwargs)
+    
+    elif optim_name == "a2sam":
         base_optimizer_kwargs={"lr": lr}
         if base_optimizer_cls == torch.optim.SGD:
             base_optimizer_kwargs["momentum"] = 0.9
-        return A2SAM(params, base_optimizer_cls=base_optimizer_cls, base_optimizer_kwargs=base_optimizer_kwargs, rho=0.05)
-    elif name == "hatam":
+        return A2SAM(params, base_optimizer_cls=base_optimizer_cls, base_optimizer_kwargs=base_optimizer_kwargs, rho=rho)
+    
+    elif optim_name == "hatam":
         # HATAM не поддерживает базовые оптимизаторы
         if base_optim_name != "sgd": # если пользователь ввел hatam-adam
             print("Warning: HATAM does not use a base optimizer concept. Ignoring '-adam'.")
         return HATAM(params, lr=lr)
+    
     else:
         raise ValueError(f"Unknown optimiser {name}")
 
@@ -231,6 +237,7 @@ def main():
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--lr", type=float, default=1e-3)
+    p.add_argument("--rho", type=float, default=0.05, help="SAM/ASAM neighborhood size")
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--log-interval", type=int, default=100, help="print training status every N batches")
@@ -259,7 +266,7 @@ def main():
     train_loader, test_loader = build_cifar10_dataloaders(args.data_root, args.batch_size, fake=args.fake_data)
 
     model = create_model(args.model).to(args.device)
-    optimizer = create_optimizer(args.optim, model.parameters(), lr=args.lr)
+    optimizer = create_optimizer(args.optim, model.parameters(), lr=args.lr, rho=args.rho)
 
     # Initialize tracking variables
     best_acc = 0.0

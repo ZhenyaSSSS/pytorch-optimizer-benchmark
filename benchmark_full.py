@@ -33,19 +33,23 @@ OPTIMS = [
     "hatam",
     "sam-sgd",
     "sam-adam",
+    "asam-sgd",
+    "asam-adam",
     "a2sam-sgd",
     "a2sam-adam",
 ]
 
 # === Оптимальные гиперпараметры для честного сравнения ===
-# Оптимизаторы на базе Adam и SGD требуют разных LR
+# Оптимизаторы на базе Adam и SGD требуют разных LR, а SAM/ASAM — разных rho
 OPTIM_HPARAMS = {
     "adam":       {"lr": 1e-3},
     "hatam":      {"lr": 1e-3},
-    "sam-sgd":    {"lr": 1e-1}, # SGD-based
-    "sam-adam":   {"lr": 1e-3}, # Adam-based
-    "a2sam-sgd":  {"lr": 1e-1}, # SGD-based
-    "a2sam-adam": {"lr": 1e-4}, # Adam-based, часто требует еще меньший LR
+    "sam-sgd":    {"lr": 1e-1, "rho": 0.05}, 
+    "sam-adam":   {"lr": 1e-3, "rho": 0.05},
+    "asam-sgd":   {"lr": 1e-1, "rho": 2.0},  # ASAM требует больший rho
+    "asam-adam":  {"lr": 1e-3, "rho": 2.0},  # 
+    "a2sam-sgd":  {"lr": 1e-1, "rho": 0.05}, # A2SAM использует свой механизм, rho стандартный
+    "a2sam-adam": {"lr": 1e-4, "rho": 0.05}, 
 }
 
 
@@ -56,6 +60,7 @@ def run_single(model: str, optim: str, args) -> Dict[str, Any]:
     # Получаем специфичные гиперпараметры для оптимизатора
     hparams = OPTIM_HPARAMS.get(optim, {})
     lr = hparams.get("lr", args.lr)
+    rho = hparams.get("rho", 0.05) # SAM по умолчанию
 
     cmd = [
         sys.executable, "train.py",
@@ -64,6 +69,7 @@ def run_single(model: str, optim: str, args) -> Dict[str, Any]:
         "--epochs", str(args.epochs),
         "--batch-size", str(args.batch_size),
         "--lr", str(lr),
+        "--rho", str(rho),
         "--device", args.device,
         "--seed", str(args.seed),
         "--track-generalization",
