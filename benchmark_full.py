@@ -51,8 +51,8 @@ OPTIM_HPARAMS = {
     "sam-adam":   {"lr": 1e-3, "rho": 0.05},
     "asam-sgd":   {"lr": 1e-1, "rho": 2.0},  # ASAM требует больший rho
     "asam-adam":  {"lr": 1e-3, "rho": 2.0},  # 
-    "a2sam-sgd":  {"lr": 0.05, "rho": 0.03, "alpha": 0.5, "k": 5, "hessian_update_freq": 5},  # ✅ ИСПРАВЛЕНО: правильные параметры A²SAM
-    "a2sam-adam": {"lr": 3e-4, "rho": 0.03, "alpha": 0.5, "k": 5, "hessian_update_freq": 5},  # ✅ ИСПРАВЛЕНО
+    "a2sam-sgd":  {"lr": 0.05, "rho": 0.03, "alpha": 0.5, "k": 5, "hessian_update_freq": 30, "power_iter_steps": 4},  # обновлено
+    "a2sam-adam": {"lr": 3e-4, "rho": 0.03, "alpha": 0.5, "k": 5, "hessian_update_freq": 30, "power_iter_steps": 4},  # обновлено
 }
 
 def prepare_datasets(root: str):
@@ -118,6 +118,8 @@ def run_single(model: str, optim: str, args) -> Dict[str, Any]:
         cmd.extend(["--gamma", str(hparams["gamma"])])
     if "weight_decay" in hparams:
         cmd.extend(["--weight-decay", str(hparams["weight_decay"])])
+    if "power_iter_steps" in hparams:
+        cmd.extend(["--power-iter-steps", str(hparams["power_iter_steps"])])
     if args.fake_data:
         cmd.append("--fake-data")
 
@@ -159,9 +161,18 @@ def aggregate_table(rows: List[Dict[str, Any]]):
     print("=" * 80)
     print(f"{header[0]:<10} {header[1]:<12} {header[2]:<7} {header[3]:<6} {header[4]:<7} {header[5]:<7}")
     print("-" * 60)
+
+    def _fmt(value, prec=2):
+        if isinstance(value, (int, float)):
+            fmt = f"{{:.{prec}f}}"
+            return fmt.format(value)
+        return "n/a"
+
     for r in rows:
-        print(f"{r['model']:<10} {r['optimizer']:<12} {r.get('best_test_acc', 'n/a')!s:<7.2f} "
-              f"{r.get('final_generalization_gap', 'n/a')!s:<6.2f} {r.get('mCE', 'n/a')!s:<7.1f} {int(r['elapsed_s']):<7}")
+        acc_str = _fmt(r.get("best_test_acc"), prec=2)
+        gap_str = _fmt(r.get("final_generalization_gap"), prec=2)
+        mce_str = _fmt(r.get("mCE"), prec=1)
+        print(f"{r['model']:<10} {r['optimizer']:<12} {acc_str:<7} {gap_str:<6} {mce_str:<7} {int(r['elapsed_s']):<7}")
 
 
 if __name__ == "__main__":

@@ -115,8 +115,8 @@ class A2SAM(Optimizer):
         rho: float = 0.05,
         alpha: float = 0.1,
         k: int = 1,
-        hessian_update_freq: int = 10,
-        power_iter_steps: int = 20,
+        hessian_update_freq: int = 30,
+        power_iter_steps: int = 4,
         tol: float = 1e-4,
         eps: float = 1e-12,
     ) -> None:

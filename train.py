@@ -98,7 +98,7 @@ def create_model(name: str):
 # ----------------------------- optimiser factory -----------------------------
 
 
-def create_optimizer(name: str, params, lr: float, rho: float, alpha: float = 0.1, k: int = 1, hessian_update_freq: int = 10, gamma: float = 0.1, weight_decay: float = 0.0):
+def create_optimizer(name: str, params, lr: float, rho: float, alpha: float = 0.1, k: int = 1, hessian_update_freq: int = 30, power_iter_steps: int = 4, gamma: float = 0.1, weight_decay: float = 0.0):
     name = name.lower()
     base_optimizer_cls = torch.optim.SGD # по умолчанию для SAM/A2SAM
     base_optim_name = "sgd"
@@ -130,7 +130,7 @@ def create_optimizer(name: str, params, lr: float, rho: float, alpha: float = 0.
             base_optimizer_kwargs["momentum"] = 0.9
         # ✅ ИСПРАВЛЕНО: Передаем все параметры A²SAM
         return A2SAM(params, base_optimizer_cls=base_optimizer_cls, base_optimizer_kwargs=base_optimizer_kwargs, 
-                     rho=rho, alpha=alpha, k=k, hessian_update_freq=hessian_update_freq)
+                     rho=rho, alpha=alpha, k=k, hessian_update_freq=hessian_update_freq, power_iter_steps=power_iter_steps)
     
     elif optim_name == "hatam":
         # HATAM не поддерживает базовые оптимизаторы
@@ -245,7 +245,8 @@ def main():
     # ✅ ДОБАВЛЕНО: Дополнительные параметры для A²SAM и HATAM
     p.add_argument("--alpha", type=float, default=0.1, help="A²SAM: strength of Hessian contribution in metric M = I + αH_k")
     p.add_argument("--k", type=int, default=1, help="A²SAM: rank of Hessian approximation (number of eigenpairs)")
-    p.add_argument("--hessian-update-freq", type=int, default=10, help="A²SAM: steps between Hessian recomputations")
+    p.add_argument("--hessian-update-freq", type=int, default=30, help="A²SAM: steps between Hessian recomputations")
+    p.add_argument("--power-iter-steps", type=int, default=4, help="A²SAM: iterations of power method per eigenpair")
     p.add_argument("--gamma", type=float, default=0.1, help="HATAM: strength of trajectory correction")
     p.add_argument("--weight-decay", type=float, default=0.0, help="Weight decay (L2 regularization)")
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
@@ -279,7 +280,7 @@ def main():
     model = create_model(args.model).to(args.device)
     optimizer = create_optimizer(args.optim, model.parameters(), lr=args.lr, rho=args.rho, 
                                 alpha=args.alpha, k=args.k, hessian_update_freq=args.hessian_update_freq, 
-                                gamma=args.gamma, weight_decay=args.weight_decay)
+                                power_iter_steps=args.power_iter_steps, gamma=args.gamma, weight_decay=args.weight_decay)
 
     # Initialize tracking variables
     best_acc = 0.0
